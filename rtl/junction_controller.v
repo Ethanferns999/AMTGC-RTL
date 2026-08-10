@@ -5,15 +5,17 @@ module junction_controller #(
     parameter RED_TIME      = 2,
     parameter PED_TIME      = 5
 ) (
-    input  wire                     clk,
-    input  wire                     rst,
-    input  wire                     timer_done,
-    input  wire                     ped_grant,
+    input wire                      clk,
+    input wire                      rst,
+    input wire                      enable,
+    input wire                      timer_done,
+    input wire                      ped_grant,
+    input wire                      emergency_override,
 
     output reg                      timer_start,
     output reg [COUNTER_WIDTH-1:0]  timer_target,
-    output reg [1:0]                ns_light,
-    output reg [1:0]                ew_light
+    output reg [1:0]                 ns_light,
+    output reg [1:0]                 ew_light
 );
 
     // ============================================================
@@ -25,7 +27,7 @@ module junction_controller #(
     localparam GREEN  = 2'b10;
 
     // ============================================================
-    // FSM state encodings
+    // FSM states
     // ============================================================
 
     localparam NS_GREEN  = 3'd0;
@@ -36,19 +38,33 @@ module junction_controller #(
     localparam EW_YELLOW = 3'd5;
     localparam ALL_RED_2 = 3'd6;
 
-    // ============================================================
-    // State registers
-    // ============================================================
-
     reg [2:0] current_state;
     reg [2:0] next_state;
 
     reg [2:0] previous_state;
     reg       initialized;
+    reg       emergency_active;
+reg enable_previous;
+
+    // ============================================================
+    // Emergency tracking
+    // ============================================================
+
+    always @(posedge clk) begin
+
+        if (rst)
+            emergency_active <= 1'b0;
+
+        else if (emergency_override)
+            emergency_active <= 1'b1;
+
+        else
+            emergency_active <= 1'b0;
+
+    end
 
     // ============================================================
     // State register
-    // Synchronous active-high reset
     // ============================================================
 
     always @(posedge clk) begin
@@ -57,6 +73,19 @@ module junction_controller #(
             current_state <= NS_GREEN;
         end
 
+        else if (emergency_override) begin
+            current_state <= ALL_RED_1;
+        end
+
+        else if (emergency_active) begin
+            // Resume safely from NS_GREEN after emergency
+            current_state <= NS_GREEN;
+        end
+
+     else if (!enable) begin
+    current_state <= NS_GREEN;
+end
+
         else begin
             current_state <= next_state;
         end
@@ -64,30 +93,30 @@ module junction_controller #(
     end
 
     // ============================================================
-    // Previous-state / initialization tracking
+    // Previous-state tracking
     // ============================================================
 
-    always @(posedge clk) begin
+ always @(posedge clk) begin
 
-        if (rst) begin
-            previous_state <= NS_GREEN;
-            initialized    <= 1'b0;
-        end
-
-        else begin
-            previous_state <= current_state;
-            initialized    <= 1'b1;
-        end
-
+    if (rst) begin
+        previous_state <= NS_GREEN;
+        initialized    <= 1'b0;
+        enable_previous <= 1'b0;
     end
 
+    else begin
+        previous_state <= current_state;
+        initialized    <= 1'b1;
+        enable_previous <= enable;
+    end
+
+end
     // ============================================================
     // Next-state logic
     // ============================================================
 
     always @(*) begin
 
-        // Default: remain in current state
         next_state = current_state;
 
         case (current_state)
@@ -103,6 +132,7 @@ module junction_controller #(
             end
 
             ALL_RED_1: begin
+
                 if (timer_done) begin
 
                     if (ped_grant)
@@ -111,26 +141,35 @@ module junction_controller #(
                         next_state = EW_GREEN;
 
                 end
+
             end
 
             PED_PHASE: begin
+
                 if (timer_done)
                     next_state = EW_GREEN;
+
             end
 
             EW_GREEN: begin
+
                 if (timer_done)
                     next_state = EW_YELLOW;
+
             end
 
             EW_YELLOW: begin
+
                 if (timer_done)
                     next_state = ALL_RED_2;
+
             end
 
             ALL_RED_2: begin
+
                 if (timer_done)
                     next_state = NS_GREEN;
+
             end
 
             default: begin
@@ -143,68 +182,78 @@ module junction_controller #(
 
     // ============================================================
     // Moore output logic
-    // Outputs depend only on current FSM state
     // ============================================================
 
     always @(*) begin
 
-        // Fail-safe defaults
         ns_light = RED;
         ew_light = RED;
 
-        case (current_state)
+        if (!enable ||
+            emergency_active ||
+            emergency_override) begin
 
-            NS_GREEN: begin
-                ns_light = GREEN;
-                ew_light = RED;
-            end
+            ns_light = RED;
+            ew_light = RED;
 
-            NS_YELLOW: begin
-                ns_light = YELLOW;
-                ew_light = RED;
-            end
+        end
 
-            ALL_RED_1: begin
-                ns_light = RED;
-                ew_light = RED;
-            end
+        else begin
 
-            PED_PHASE: begin
-                ns_light = RED;
-                ew_light = RED;
-            end
+            case (current_state)
 
-            EW_GREEN: begin
-                ns_light = RED;
-                ew_light = GREEN;
-            end
+                NS_GREEN: begin
+                    ns_light = GREEN;
+                    ew_light = RED;
+                end
 
-            EW_YELLOW: begin
-                ns_light = RED;
-                ew_light = YELLOW;
-            end
+                NS_YELLOW: begin
+                    ns_light = YELLOW;
+                    ew_light = RED;
+                end
 
-            ALL_RED_2: begin
-                ns_light = RED;
-                ew_light = RED;
-            end
+                ALL_RED_1: begin
+                    ns_light = RED;
+                    ew_light = RED;
+                end
 
-            default: begin
-                ns_light = RED;
-                ew_light = RED;
-            end
+                PED_PHASE: begin
+                    ns_light = RED;
+                    ew_light = RED;
+                end
 
-        endcase
+                EW_GREEN: begin
+                    ns_light = RED;
+                    ew_light = GREEN;
+                end
+
+                EW_YELLOW: begin
+                    ns_light = RED;
+                    ew_light = YELLOW;
+                end
+
+                ALL_RED_2: begin
+                    ns_light = RED;
+                    ew_light = RED;
+                end
+
+                default: begin
+                    ns_light = RED;
+                    ew_light = RED;
+                end
+
+            endcase
+
+        end
 
     end
 
     // ============================================================
-    // Timer target selection
+    // Timer target
     // ============================================================
 
     always @(*) begin
 
-        // Safe default
         timer_target = RED_TIME;
 
         case (current_state)
@@ -235,19 +284,25 @@ module junction_controller #(
 
         endcase
 
+        if (!enable ||
+            emergency_active ||
+            emergency_override)
+
+            timer_target = RED_TIME;
+
     end
 
     // ============================================================
-    // Timer start pulse
-    //
-    // Generates one-cycle pulse:
-    //   - when controller initializes
-    //   - when FSM enters a new state
+    // Timer start
     // ============================================================
 
-    always @(*) begin
+  always @(*) begin
 
-        timer_start = 1'b0;
+    timer_start = 1'b0;
+
+    if (enable &&
+        !emergency_active &&
+        !emergency_override) begin
 
         if (!initialized)
             timer_start = 1'b1;
@@ -255,6 +310,11 @@ module junction_controller #(
         else if (current_state != previous_state)
             timer_start = 1'b1;
 
+        else if (!enable_previous)
+            timer_start = 1'b1;
+
     end
+
+end
 
 endmodule
