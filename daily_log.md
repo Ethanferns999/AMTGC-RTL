@@ -137,3 +137,18 @@ Task 3 system integration and verification completed successfully.
 - Begin next project task.
 - Begin Task 2.
 - Design the Generic Timer module.
+
+
+Daily Log — Day 4
+
+Date: 10 August 2026
+
+Work Completed
+Implemented adaptive traffic-density-based green timing.
+Added configurable minimum/maximum green-time limits.
+Integrated adaptive timing with both junctions.
+Verified density-based timing for all density levels.
+Verified green-wave, pedestrian arbitration, emergency override, and traffic-light safety.
+Verification
+All adaptive timing tests passed.
+All Task 4 integration tests passed.
