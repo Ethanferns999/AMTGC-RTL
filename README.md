@@ -4,59 +4,57 @@
 
 The **Adaptive Multi-Junction Traffic Grid Controller (AMTGC)** is a parameterized Verilog RTL project developed as part of the **Elevance Skills RTL Design Internship 2026**.
 
-The system models two coordinated 4-way traffic junctions, Junction A and Junction B, operating as a single adaptive traffic-control system.
+The system models two coordinated 4-way traffic junctions with adaptive traffic control, pedestrian arbitration, emergency override, and green-wave synchronization.
 
-The design demonstrates:
+The project demonstrates:
 
 - Parameterized RTL design
-- Moore finite-state-machine architecture
+- Moore FSM architecture
 - Reusable timer modules
 - Adaptive traffic-density timing
 - Green-wave coordination
 - Shared pedestrian arbitration
 - Round-robin fairness
-- System-wide emergency override
+- Emergency override
 - Hierarchical RTL architecture
 - Self-checking verification
 - Randomized safety verification
-
-The project is designed to demonstrate practical RTL design and verification methodology suitable for semiconductor and digital-design development environments.
 
 ---
 
 ## System Architecture
 
-The AMTGC consists of the following major modules:
-
 ```text
-                    +----------------------+
-                    |      amtgc_top       |
-                    |   System Controller  |
-                    +----------+-----------+
-                               |
-              +----------------+----------------+
-              |                                 |
-              v                                 v
-     +-------------------+             +-------------------+
-     |   Junction A      |             |   Junction B      |
-     | junction_controller|            | junction_controller|
-     +---------+---------+             +---------+---------+
-               |                                 |
-               v                                 v
-        +-------------+                   +-------------+
-        | Generic     |                   | Generic     |
-        | Timer A     |                   | Timer B     |
-        +-------------+                   +-------------+
+                         +----------------------+
+                         |      amtgc_top       |
+                         |                      |
+                         |  Green-Wave Control  |
+                         |  Emergency Override  |
+                         +----------+-----------+
+                                    |
+              +---------------------+---------------------+
+              |                                           |
+              v                                           v
+     +-------------------+                       +-------------------+
+     |    Junction A     |                       |    Junction B     |
+     | junction_controller|                      | junction_controller|
+     +---------+---------+                       +---------+---------+
+               |                                           |
+               v                                           v
+        +-------------+                             +-------------+
+        | Generic     |                             | Generic     |
+        | Timer A     |                             | Timer B     |
+        +-------------+                             +-------------+
 
-                    +----------------------+
-                    |    ped_arbiter       |
-                    |  Round-Robin Arbiter |
-                    +----------------------+
-Junction Controller
+                         +----------------------+
+                         |     ped_arbiter      |
+                         |   Round-Robin Logic  |
+                         +----------------------+
+Traffic FSM
 
-Each junction uses the same reusable junction_controller RTL module.
+Each junction uses the same parameterized junction_controller module.
 
-The controller implements the traffic sequence:
+The normal traffic sequence is:
 
 NS_GREEN
     |
@@ -65,8 +63,6 @@ NS_YELLOW
     |
     v
 ALL_RED_1
-    |
-    +----> PED_PHASE (when granted)
     |
     v
 EW_GREEN
@@ -80,22 +76,13 @@ ALL_RED_2
     v
 NS_GREEN
 
-The all-red phases provide a safety interval between conflicting traffic directions.
+A pedestrian phase can be inserted when a pedestrian grant is received.
 
-Main Features
-1. Parameterized Traffic Timing
+The all-red phases provide a safety gap between conflicting traffic directions.
 
-Green, yellow, red, and pedestrian timing values are configurable through module parameters.
+Adaptive Timing
 
-Adaptive green timing is controlled using traffic-density information.
-
-The implemented green-time limits are:
-
-Minimum green time = 3 cycles
-Maximum green time = 8 cycles
-Green extension    = 1 cycle
-
-Example adaptive behavior:
+Green time adapts according to the traffic-density input.
 
 Traffic Density	Green Target
 0	3
@@ -106,46 +93,42 @@ Traffic Density	Green Target
 5	8
 6	8
 7	8
-2. Green-Wave Coordination
 
-Junction A and Junction B do not operate independently.
+Configured limits:
 
-A configurable GREEN_WAVE_OFFSET controls the startup relationship between the two junctions.
+Minimum green time: 3 cycles
+Maximum green time: 8 cycles
+Green extension: 1 cycle
+Green-Wave Coordination
 
-Junction B is initially held before entering normal operation and subsequently begins its North-South green phase within the configured coordination window.
+Junction A and Junction B operate as a coordinated system.
 
-The green-wave relationship was verified during system-level simulation.
+Junction B is initially held and is enabled after the configured GREEN_WAVE_OFFSET.
 
-3. Shared Pedestrian Arbitration
+The green-wave relationship was verified through system-level simulation.
 
-A single ped_arbiter module handles pedestrian requests from both junctions.
+Pedestrian Arbitration
 
-The arbiter uses a round-robin policy to prevent starvation.
+A shared ped_arbiter handles pedestrian requests from both junctions.
 
-For simultaneous requests:
+The arbiter uses round-robin arbitration to prevent starvation.
 
-First request  -> Junction A
-Next request   -> Junction B
-Next request   -> Junction A
-Next request   -> Junction B
-...
+Repeated simultaneous requests alternate service between Junction A and Junction B.
 
-Verification demonstrated:
+Final verification:
 
 Pedestrian A grants = 60
 Pedestrian B grants = 60
 
-for 120 simultaneous pedestrian requests.
+The grants are mutually exclusive.
 
-The two grants are mutually exclusive.
+Emergency Override
 
-4. Emergency Override
+A system-wide emergency_override input is distributed to both junction controllers.
 
-A system-wide emergency_override input is provided.
+When asserted, both junctions transition to a safe all-red condition and remain there while the override is active.
 
-When asserted, both junctions transition to an all-red condition and remain there while the override is active.
-
-Emergency behavior was verified during system-level simulation.
+The final verification confirmed safe emergency activation, maintenance, and release.
 
 RTL Modules
 amtgc_top.v
@@ -158,42 +141,40 @@ Instantiates Junction A
 Instantiates Junction B
 Instantiates generic timers
 Instantiates pedestrian arbiter
-Controls green-wave enable sequencing
+Controls green-wave startup
 Distributes emergency override
-Connects traffic-density inputs
 junction_controller.v
 
-Parameterized Moore FSM used by both traffic junctions.
+Parameterized Moore FSM.
 
 Responsibilities:
 
 Traffic phase sequencing
-Adaptive green timing
+Adaptive timing
 Pedestrian phase handling
 Emergency handling
 Timer control
 Traffic-light outputs
 generic_timer.v
 
-Reusable parameterized timer module.
+Reusable parameterized timer.
 
 Responsibilities:
 
-Start-controlled counting
-Configurable counter width
-Configurable target count
+Clock-cycle counting
+Configurable target
 Done indication
 Reset handling
 ped_arbiter.v
 
-Shared pedestrian arbitration module.
+Shared round-robin pedestrian arbiter.
 
 Responsibilities:
 
-Accept requests from Junction A and B
-Generate mutually exclusive grants
-Implement round-robin arbitration
+Receive requests from both junctions
+Generate grants
 Prevent starvation
+Ensure mutually exclusive grants
 Repository Structure
 AMTGC-RTL/
 |
@@ -205,8 +186,8 @@ AMTGC-RTL/
 |
 +-- tb/
 |   +-- amtgc_top_tb.v
-|   +-- junction_controller_tb.v
 |   +-- generic_timer_tb.v
+|   +-- junction_controller_tb.v
 |   +-- junction_timer_integration_tb.v
 |   +-- ped_arbiter_tb.v
 |   +-- junction_adaptive_tb.v
@@ -214,33 +195,28 @@ AMTGC-RTL/
 |   +-- amtgc_full_verification_tb.v
 |
 +-- docs/
+|   +-- architecture.md
+|   +-- verification.md
+|   +-- bug-fixes.md
+|   +-- waveform_evidence.md
+|
++-- report/
+|   +-- AMTGC_Final_Report.md
+|
 +-- images/
 +-- logs/
-+-- report/
 +-- waveforms/
 |
 +-- assumptions.md
-+-- bug_log.md
-+-- daily_log.md
 +-- verification_plan.md
++-- daily_log.md
++-- bug_log.md
 +-- README.md
 Verification
 
-The project uses self-checking Verilog testbenches.
+The project uses self-checking Verilog testbenches and was verified using ModelSim Intel FPGA Edition 2020.1.
 
-Verification was performed at multiple levels:
-
-Module-Level Verification
-Generic timer
-Junction controller
-Pedestrian arbiter
-Integration Verification
-Junction controller + timer
-Complete AMTGC top-level system
-Adaptive timing integration
-Full-System Verification
-
-The final Task 5 verification environment tested:
+The final Task 5 full-system verification tested:
 
 Reset behavior
 Complete traffic FSM cycle
@@ -251,7 +227,7 @@ Emergency override
 Runtime reset
 Randomized safety behavior
 
-Final verification result:
+Final result:
 
 Total checks = 24
 Total errors = 0
@@ -264,70 +240,66 @@ Randomized cycles completed = 500
 ALL TASK 5 VERIFICATION TESTS PASSED
 AMTGC full-system verification successful.
 FSM Coverage
-NS_GREEN   = observed
-NS_YELLOW  = observed
-ALL_RED_1  = observed
-EW_GREEN   = observed
-EW_YELLOW  = observed
-ALL_RED_2  = observed
-Simulation Environment
-
-The design was verified using ModelSim Intel FPGA Edition 2020.1.
-
+Phase	Observed
+NS_GREEN	Yes
+NS_YELLOW	Yes
+ALL_RED_1	Yes
+EW_GREEN	Yes
+EW_YELLOW	Yes
+ALL_RED_2	Yes
+Simulation
 Compile RTL
-
-From the project directory:
-
 vlog rtl/*.v
-Compile Testbench
-
-Example:
-
+Compile Full-System Testbench
 vlog tb/amtgc_full_verification_tb.v
 Run Full-System Verification
 vsim work.amtgc_full_verification_tb
 run -all
-Run Individual Tests
-
-Generic timer:
-
+Generic Timer Test
 vlog rtl/generic_timer.v tb/generic_timer_tb.v
 vsim work.generic_timer_tb
 run -all
-
-Junction controller:
-
+Junction Controller Test
 vlog rtl/junction_controller.v rtl/generic_timer.v tb/junction_controller_tb.v
 vsim work.junction_controller_tb
 run -all
-
-Pedestrian arbiter:
-
+Pedestrian Arbiter Test
 vlog rtl/ped_arbiter.v tb/ped_arbiter_tb.v
 vsim work.ped_arbiter_tb
 run -all
 Design Practices
 
-The RTL follows these design practices:
+The RTL follows:
 
 Parameterized modules
-Reusable hardware blocks
 Hierarchical architecture
 Named port connections
 Non-blocking assignments for sequential logic
 Blocking assignments for combinational logic
 Default cases in FSM logic
-Explicit reset behavior
-No magic timing constants inside FSM logic
+Explicit reset values
+No magic timing constants in FSM logic
 Separate timer and FSM responsibilities
 Self-checking verification
-Development Tasks
+Documentation
+
+Additional project documentation is available in docs/:
+
+architecture.md — System architecture and module responsibilities
+verification.md — Verification methodology and results
+bug-fixes.md — Development and debugging history
+waveform_evidence.md — Simulation evidence
+
+The final technical report is available in:
+
+report/AMTGC_Final_Report.md
+Development Status
 Task	Description	Status
 Task 1	System Architecture Planning	Complete
 Task 2	Parameterized RTL Module Design	Complete
 Task 3	System Integration	Complete
 Task 4	Adaptive Timing	Complete
-Task 5	Full System Verification	Complete
+Task 5	Full-System Verification	Complete
 Task 6	Professional Documentation & Delivery	In Progress
 Author
 
