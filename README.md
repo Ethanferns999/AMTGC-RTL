@@ -300,7 +300,7 @@ Task 2	Parameterized RTL Module Design	Complete
 Task 3	System Integration	Complete
 Task 4	Adaptive Timing	Complete
 Task 5	Full-System Verification	Complete
-Task 6	Professional Documentation & Delivery	In Progress
+| Task 6 | Professional Documentation & Delivery | Complete |
 Author
 
 Ethan Fernandes
